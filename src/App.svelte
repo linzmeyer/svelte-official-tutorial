@@ -1,146 +1,111 @@
 <script>
-	// These values are bound to properties of the video
-	let time = 0;
-	let duration;
-	let paused = true;
+	import Eliza from 'elizabot';
+	import { beforeUpdate, afterUpdate } from 'svelte';
 
-	let showControls = true;
-	let showControlsTimeout;
+	let div;
+	let autoscroll
 
-	// Used to track time of last mouse down event
-	let lastMouseDown;
+	beforeUpdate(() => {
+		// determine whether we should auto-scroll
+		// once the DOM is updated...
+		autoscroll = div && (div.offsetHeight * div.scrollTop) > (div.scrollHeight - 20)
+	});
 
-	function handleMove(e) {
-		// Make the controls visible, but fade out after
-		// 2.5 seconds of inactivity
-		clearTimeout(showControlsTimeout);
-		showControlsTimeout = setTimeout(() => showControls = false, 2500);
-		showControls = true;
+	afterUpdate(() => {
+		if (autoscroll) {
+			div.scrollTo(0, div.scrollHeight)
+		}
+	})
 
-		if (!duration) return; // video not loaded yet
-		if (e.type !== 'touchmove' && !(e.buttons & 1)) return; // mouse not down
+	const eliza = new Eliza();
 
-		const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-		const { left, right } = this.getBoundingClientRect();
-		time = duration * (clientX - left) / (right - left);
-	}
+	let comments = [
+		{ author: 'eliza', text: eliza.getInitial() }
+	];
 
-	// we can't rely on the built-in click event, because it fires
-	// after a drag — we have to listen for clicks ourselves
-	function handleMousedown(e) {
-		lastMouseDown = new Date();
-	}
+	function handleKeydown(event) {
+		if (event.key === 'Enter') {
+			const text = event.target.value;
+			if (!text) return;
 
-	function handleMouseMove(e) {
-		m.x = e.clientX;
-		m.y = e.clientY;
-	}
+			comments = comments.concat({
+				author: 'user',
+				text
+			});
 
-	function handleMouseup(e) {
-		if (new Date() - lastMouseDown < 300) {
-			if (paused) e.target.play();
-			else e.target.pause();
+			event.target.value = '';
+
+			const reply = eliza.transform(text);
+
+			setTimeout(() => {
+				comments = comments.concat({
+					author: 'eliza',
+					text: '...',
+					placeholder: true
+				});
+
+				setTimeout(() => {
+					comments = comments.filter(comment => !comment.placeholder).concat({
+						author: 'eliza',
+						text: reply
+					});
+				}, 500 + Math.random() * 500);
+			}, 200 + Math.random() * 200);
 		}
 	}
-
-	function format(seconds) {
-		if (isNaN(seconds)) return '...';
-
-		const minutes = Math.floor(seconds / 60);
-		seconds = Math.floor(seconds % 60);
-		if (seconds < 10) seconds = '0' + seconds;
-
-		return `${minutes}:${seconds}`;
-	}
-	let m = {x: 0, y: 0}
 </script>
 
-<h1>Caminandes: Llamigos</h1>
-<p>From <a href="https://cloud.blender.org/open-projects">Blender Open Projects</a>. CC-BY</p>
-
-<div>
-	<video
-		poster="https://sveltejs.github.io/assets/caminandes-llamigos.jpg"
-		src="https://sveltejs.github.io/assets/caminandes-llamigos.mp4"
-		on:mousemove={handleMove}
-		on:touchmove|preventDefault={handleMove}
-		on:mousedown={handleMousedown}
-		on:mouseup={handleMouseup}
-		bind:currentTime={time}
-		bind:duration
-		bind:paused>
-		<track kind="captions">
-	</video>
-
-	<div class="controls" style="opacity: {duration && showControls ? 1 : 0}">
-		<progress value="{(time / duration) || 0}"/>
-
-		<div class="info">
-			<span class="time">{format(time)}</span>
-			<span>click anywhere to {paused ? 'play' : 'pause'} / drag to seek</span>
-			<span class="time">{format(duration)}</span>
-		</div>
-	</div>
-	<div>
-		<p class="content" on:mousemove={handleMouseMove}>x: {m.x} y: {m.y}</p>
-	</div>
-</div>
-
 <style>
-	.content {
-		height: 500px;
-		border: black;
-		border-width: 1px;
-		border-style: solid;
-	}
-	div {
-		position: relative;
-	}
-
-	.controls {
-		position: absolute;
-		top: 0;
-		width: 100%;
-		transition: opacity 1s;
-	}
-
-	.info {
+	.chat {
 		display: flex;
-		width: 100%;
-		justify-content: space-between;
+		flex-direction: column;
+		height: 100%;
+		max-width: 320px;
+	}
+
+	.scrollable {
+		flex: 1 1 auto;
+		border-top: 1px solid #eee;
+		margin: 0 0 0.5em 0;
+		overflow-y: auto;
+	}
+
+	article {
+		margin: 0.5em 0;
+	}
+
+	.user {
+		text-align: right;
 	}
 
 	span {
-		padding: 0.2em 0.5em;
+		padding: 0.5em 1em;
+		display: inline-block;
+	}
+
+	.eliza span {
+		background-color: #eee;
+		border-radius: 1em 1em 1em 0;
+	}
+
+	.user span {
+		background-color: #0074D9;
 		color: white;
-		text-shadow: 0 0 8px black;
-		font-size: 1.4em;
-		opacity: 0.7;
-	}
-
-	.time {
-		width: 3em;
-	}
-
-	.time:last-child { text-align: right }
-
-	progress {
-		display: block;
-		width: 100%;
-		height: 10px;
-		-webkit-appearance: none;
-		appearance: none;
-	}
-
-	progress::-webkit-progress-bar {
-		background-color: rgba(0,0,0,0.2);
-	}
-
-	progress::-webkit-progress-value {
-		background-color: rgba(255,255,255,0.6);
-	}
-
-	video {
-		width: 100%;
+		border-radius: 1em 1em 0 1em;
+		word-break: break-all;
 	}
 </style>
+
+<div class="chat">
+	<h1>Eliza</h1>
+
+	<div class="scrollable" bind:this={div}>
+		{#each comments as comment}
+			<article class={comment.author}>
+				<span>{comment.text}</span>
+			</article>
+		{/each}
+	</div>
+
+	<input on:keydown={handleKeydown}>
+</div>
